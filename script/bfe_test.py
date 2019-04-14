@@ -17,10 +17,11 @@ from config import opt
 from datasets import data_manager
 from datasets.data_loader import ImageData
 from datasets.samplers import RandomIdentitySampler
-from models.networks import ResNetBuilder, IDE, Resnet, BFE
+#from models.networks import ResNetBuilder, IDE, Resnet, BFE
+from models.BFE import BFE
 from trainers.evaluator import ResNetEvaluator
 from trainers.trainer import cls_tripletTrainer
-from utils.loss import CrossEntropyLabelSmooth, TripletLoss, Margin
+from utils.loss import CrossEntropyLabelSmooth, TripletLoss, Margin, CrossEntropyLabelSmoothWithFocal
 from utils.LiftedStructure import LiftedStructureLoss
 from utils.DistWeightDevianceLoss import DistWeightBinDevianceLoss
 from utils.serialization import Logger, save_checkpoint
@@ -55,7 +56,7 @@ def train(**kwargs):
     summary_writer = SummaryWriter(osp.join(opt.save_dir, 'tensorboard_log'))
 
     trainloader = DataLoader(
-        ImageData(dataset.train, TrainTransform(opt.datatype)),
+        ImageData(dataset.train, TrainTransform(opt.datatype)),    #RandomHorizontalFlip + Normal + Cutout
         sampler=RandomIdentitySampler(dataset.train, opt.num_instances),
         batch_size=opt.train_batch, num_workers=opt.workers,
         pin_memory=pin_memory, drop_last=True
@@ -109,8 +110,9 @@ def train(**kwargs):
                                 queryFliploader, galleryFliploader, re_ranking=opt.re_ranking, savefig=opt.savefig)
         return
 
-    # xent_criterion = nn.CrossEntropyLoss()
-    xent_criterion = CrossEntropyLabelSmooth(dataset.num_train_pids)
+    #xent_criterion = nn.CrossEntropyLoss()
+    #xent_criterion = CrossEntropyLabelSmooth(dataset.num_train_pids)
+    xent_criterion = CrossEntropyLabelSmoothWithFocal(dataset.num_train_pids)
 
     if opt.loss == 'triplet':
         embedding_criterion = TripletLoss(opt.margin)
@@ -120,6 +122,7 @@ def train(**kwargs):
         embedding_criterion = Margin()
 
     def criterion(triplet_y, softmax_y, labels):
+
         losses = [embedding_criterion(output, labels)[0] for output in triplet_y] + \
                  [xent_criterion(output, labels) for output in softmax_y]
         loss = sum(losses)
@@ -136,9 +139,9 @@ def train(**kwargs):
     reid_trainer = cls_tripletTrainer(opt, model, optimizer, criterion, summary_writer)
 
     def adjust_lr(optimizer, ep):
-        if ep < 10:
-            lr = opt.lr * 0.1 * (ep /10.0)    # warm_up
-        elif ep < 50:
+        # if ep < 10:
+        #     lr = opt.lr * 0.1 * (ep /10.0)    # warm_up
+        if ep < 50:
             lr = opt.lr * (ep // 5 + 1)
         elif ep < 200:
             lr = opt.lr * 10.0

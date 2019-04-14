@@ -3,7 +3,7 @@ import os
 import sys
 from os import path as osp
 from pprint import pprint
-
+import gc
 import numpy as np
 import torch
 from tensorboardX import SummaryWriter
@@ -121,8 +121,12 @@ def train(**kwargs):
 
     optim_policy = model.get_optim_policy()
 
+    start_epoch = opt.start_epoch
+
     if opt.pretrained_model:
-        state_dict = torch.load(opt.pretrained_model)['state_dict']
+        checkpoint = torch.load(opt.pretrained_model)
+        state_dict = checkpoint['state_dict']
+
         # state_dict = {k: v for k, v in state_dict.items() \
         #        if not ('reduction' in k or 'softmax' in k)}
         try:
@@ -172,7 +176,7 @@ def train(**kwargs):
     else:
         optimizer = torch.optim.Adam(optim_policy, lr=opt.lr, weight_decay=opt.weight_decay)
 
-    start_epoch = opt.start_epoch
+
     # get trainer and evaluator
     reid_trainer = PCBTrainer(opt, model, optimizer, criterion, summary_writer)
 
@@ -229,6 +233,14 @@ def train(**kwargs):
         # select & cluster images as training set of this epochs
         print('Clustering and labeling...')
         labels = cluster.fit_predict(rerank_dist)
+        del(rerank_dist)
+        del(source_features)
+        del(target_features)
+        try:
+            gc.collect()
+        except:
+            print('cannot collect')
+
         num_ids = len(set(labels)) - 1
         print('Iteration {} have {} training ids'.format(iter_n + 1, num_ids))
         # generate new dataset
@@ -267,24 +279,26 @@ def train(**kwargs):
                             filename='checkpoint_ep' + str(iter_n + 1) + '.pth.tar')
 
 
-            if opt.mode == 'class':
-                rank1 = test(model, tgt_queryloader)
-            else:
-                rank1 = reid_evaluator.evaluate(tgt_queryloader, tgt_galleryloader, tgt_queryFliploader, tgt_galleryFliploader)
-            is_best = rank1 > best_rank1
-            if is_best:
-                best_rank1 = rank1
-                best_epoch = iter_n + 1
+            if (iter_n + 1) % (opt.eval_step*4) == 0:
+                if opt.mode == 'class':
+                    rank1 = test(model, tgt_queryloader)
+                else:
+                    rank1 = reid_evaluator.evaluate(tgt_queryloader, tgt_galleryloader, tgt_queryFliploader,
+                                                    tgt_galleryFliploader)
+                is_best = rank1 > best_rank1
+                if is_best:
+                    best_rank1 = rank1
+                    best_epoch = iter_n + 1
 
-            if use_gpu:
-                state_dict = model.module.state_dict()
-            else:
-                state_dict = model.state_dict()
+                if use_gpu:
+                    state_dict = model.module.state_dict()
+                else:
+                    state_dict = model.state_dict()
 
-            if is_best:
-                save_checkpoint({'state_dict': state_dict, 'epoch': iter_n + 1},
-                            is_best=is_best, save_dir=opt.save_dir,
-                            filename='checkpoint_ep' + str(iter_n + 1) + '.pth.tar')
+                if is_best:
+                    save_checkpoint({'state_dict': state_dict, 'epoch': iter_n + 1},
+                                    is_best=is_best, save_dir=opt.save_dir,
+                                    filename='checkpoint_ep' + str(iter_n + 1) + '.pth.tar')
 
     print('Best rank-1 {:.1%}, achived at epoch {}'.format(best_rank1, best_epoch))
 

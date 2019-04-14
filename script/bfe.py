@@ -18,6 +18,7 @@ from datasets import data_manager
 from datasets.data_loader import ImageData
 from datasets.samplers import RandomIdentitySampler
 from models.networks import ResNetBuilder, IDE, Resnet, BFE
+#from models.BFE import BFE
 from trainers.evaluator import ResNetEvaluator
 from trainers.trainer import cls_tripletTrainer
 from utils.loss import CrossEntropyLabelSmooth, TripletLoss, Margin

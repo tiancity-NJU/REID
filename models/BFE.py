@@ -134,6 +134,27 @@ class BFE(nn.Module):
         self.global_reduction = copy.deepcopy(reduction)
         self.global_reduction.apply(weights_init_kaiming)
 
+
+        self.global_conv_list=nn.ModuleList()
+        for _ in range(6):
+            self.global_conv_list.append(nn.Sequential(
+                nn.Conv2d(2048, 256, 1),
+                nn.BatchNorm2d(256),
+                nn.ReLU()
+                )
+            )
+        self.global_softmax_list=nn.ModuleList()
+        for _ in range(6):
+            self.global_softmax_list.append(nn.Sequential(
+                nn.Linear(256, num_classes)
+                )
+            )
+
+        for i in range(6):
+            self.global_conv_list[i].apply(weights_init_kaiming)
+            self.global_softmax_list[i].apply(weights_init_kaiming)
+
+
         # part branch
         self.res_part2 = Bottleneck(2048, 512)
 
@@ -160,7 +181,7 @@ class BFE(nn.Module):
         triplet_features = []
         softmax_features = []
 
-        # global branch
+        global branch
         glob = self.global_avgpool(x)
         global_triplet_feature = self.global_reduction(glob).squeeze()
         global_softmax_class = self.global_softmax(global_triplet_feature)
@@ -168,7 +189,28 @@ class BFE(nn.Module):
         triplet_features.append(global_triplet_feature)
         predict.append(global_triplet_feature)
 
+        # assert x.size(2) % 6 == 0
+        # stripes_h = int(x.size(2) / 6)
+        #
+        # for i in range(6):
+        #     feat = F.avg_pool2d(x[:, :, i * stripes_h:(i + 1) * stripes_h, :], (stripes_h, x.size(-1)))
+        #     feat = self.global_conv_list[i](feat)
+        #     feat =feat.view(feat.size(0), -1)
+        #     triplet_features.append(feat)
+        #
+        #     logit = self.global_softmax_list[i](feat)
+        #     softmax_features.append(logit)
+        #
+        #
+        # tmp = torch.stack(triplet_features)
+        # tmp = tmp.permute(1, 0, 2).contiguous()
+        #
+        # tmp = tmp.view(tmp.size(0), -1)
+        # predict.append(tmp)
+
+
         # part branch
+
         x = self.res_part2(x)
 
         x = self.batch_crop(x)

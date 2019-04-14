@@ -5,6 +5,7 @@ import torch
 from PIL import Image
 import matplotlib.pyplot as plt
 from collections import defaultdict
+import gc
 
 
 from utils.AlignedTripletLoss import low_memory_local_dist
@@ -132,6 +133,12 @@ class ResNetEvaluator:
         for r in ranks:
             print("Rank-{:<3}: {:.1%}".format(r, cmc[r - 1]))
         print("------------------")
+        del(qf)
+        del(gf)
+        try:
+            gc.collect()
+        except:
+            print('cannot collect.....')
 
         return cmc[0]
 

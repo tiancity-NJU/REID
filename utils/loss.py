@@ -147,11 +147,45 @@ class CrossEntropyLabelSmooth(nn.Module):
             targets: ground truth labels with shape (num_classes)
         """
         log_probs = self.logsoftmax(inputs)
-        targets = torch.zeros(log_probs.size()).scatter_(1, targets.unsqueeze(1).cpu(), 1)
+        targets = torch.zeros(log_probs.size()).scatter_(1, targets.unsqueeze(1).cpu(), 1)   # one hot mat    bs * num_class
         if self.use_gpu: targets = targets.cuda()
         targets = (1 - self.epsilon) * targets + self.epsilon / self.num_classes
         loss = (- targets * log_probs).mean(0).sum()
         return loss
+
+
+class CrossEntropyLabelSmoothWithFocal(nn.Module):
+    """Cross entropy loss with label smoothing regularizer.
+    Reference:
+    Szegedy et al. Rethinking the Inception Architecture for Computer Vision. CVPR 2016.
+    Equation: y = (1 - epsilon) * y + epsilon / K.
+    Args:
+        num_classes (int): number of classes.
+        epsilon (float): weight.
+    """
+
+    def __init__(self, num_classes, epsilon=0.0, gamma=2, use_gpu=True):
+        super(CrossEntropyLabelSmoothWithFocal, self).__init__()
+        self.num_classes = num_classes
+        self.epsilon = epsilon
+        self.use_gpu = use_gpu
+        self.softmax = nn.Softmax(dim=1)
+        self.gamma = gamma
+
+    def forward(self, inputs, targets):
+        """
+        Args:
+            inputs: prediction matrix (before softmax) with shape (batch_size, num_classes)
+            targets: ground truth labels with shape (num_classes)
+        """
+        log_probs = self.softmax(inputs)
+        targets = torch.zeros(log_probs.size()).scatter_(1, targets.unsqueeze(1).cpu(), 1)   # one hot mat    bs * num_class
+        if self.use_gpu: targets = targets.cuda()
+        targets = (1 - self.epsilon) * targets + self.epsilon / self.num_classes
+        loss = (- targets * torch.log(log_probs) * ((1-log_probs)*self.gamma)).mean(0).sum()
+        return loss
+
+
 
 class Margin:
     def __call__(self, embeddings, labels):
